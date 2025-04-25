@@ -10,38 +10,40 @@ import time
 from vosk import Model, KaldiRecognizer
 import wave
 import os
-import speech_recognition as sr  # برای مدل آنلاین
+import speech_recognition as sr
 
 # تنظیمات عمومی
 is_recording = False
 recording = []
 samplerate = 44100
 buffer_duration = 1
-selected_mode = None  # online یا offline
+selected_mode = None
+RECORDINGS_DIR = "recordings"
 
-# تابع UI برای انتخاب مدل
-def choose_model():
+# ساخت پوشه ضبط‌ها
+os.makedirs(RECORDINGS_DIR, exist_ok=True)
+
+# انتخاب مدل
+def choose_model_ui(main_root):
     def select(option):
         global selected_mode
         selected_mode = option
-        root.destroy()
+        model_window.destroy()
 
-    root = tk.Tk()
-    root.title("انتخاب مدل تشخیص گفتار")
-    root.geometry("300x150")
+    model_window = tk.Toplevel(main_root)
+    model_window.title("انتخاب مدل تشخیص گفتار")
+    model_window.geometry("300x150")
 
-    label = tk.Label(root, text="مدل مورد نظر را انتخاب کنید:")
+    label = tk.Label(model_window, text="مدل مورد نظر را انتخاب کنید:")
     label.pack(pady=10)
 
-    btn1 = tk.Button(root, text="مدل آفلاین (Vosk)", command=lambda: select("offline"))
+    btn1 = tk.Button(model_window, text="مدل آفلاین (Vosk)", command=lambda: select("offline"))
     btn1.pack(pady=5)
 
-    btn2 = tk.Button(root, text="مدل آنلاین (Google)", command=lambda: select("online"))
+    btn2 = tk.Button(model_window, text="مدل آنلاین (Google)", command=lambda: select("online"))
     btn2.pack(pady=5)
 
-    root.mainloop()
-
-# تابع شروع ضبط
+# شروع/توقف ضبط
 def toggle_recording():
     global is_recording, recording
     if not is_recording:
@@ -66,12 +68,13 @@ def save_recording():
     if recording:
         audio = np.concatenate(recording, axis=0)
         now = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"record_{now}.wav"
+        filename = f"{RECORDINGS_DIR}/record_{now}.wav"
         wav.write(filename, samplerate, audio)
         print(f"فایل صدا ذخیره شد: {filename}")
         time.sleep(1)
         abs_filename = os.path.abspath(filename)
         process_audio(abs_filename)
+        update_file_count_label()
 
 def process_audio(filename):
     print(f"پردازش فایل: {filename}")
@@ -101,11 +104,58 @@ def process_audio(filename):
         except sr.RequestError as e:
             print(f"خطا در اتصال به Google: {e}")
 
-# اجرای UI و انتخاب مدل
-choose_model()
+# دریافت تعداد فایل‌های ضبط‌شده
+def get_recording_count():
+    files = [f for f in os.listdir(RECORDINGS_DIR) if f.endswith('.wav')]
+    return len(files)
 
-# اتصال کلید F9 به ضبط
-keyboard.add_hotkey('f9', toggle_recording)
+# آپدیت لیبل تعداد فایل‌ها
+def update_file_count_label():
+    count = get_recording_count()
+    if file_count_label:
+        file_count_label.config(text=f"تعداد فایل‌های ضبط‌شده: {count}")
 
-print("برنامه فعال است. با F9 ضبط را شروع/توقف کن. با ESC از برنامه خارج شو.")
-keyboard.wait('esc')
+# حذف همه فایل‌های ضبط‌شده
+def delete_all_recordings():
+    for file in os.listdir(RECORDINGS_DIR):
+        if file.endswith(".wav"):
+            os.remove(os.path.join(RECORDINGS_DIR, file))
+    update_file_count_label()
+    messagebox.showinfo("پاک‌سازی", "همه فایل‌های ضبط‌شده حذف شدند.")
+
+# اجرای برنامه اصلی
+def main():
+    global file_count_label
+
+    root = tk.Tk()
+    root.title("برنامه تشخیص گفتار")
+    root.geometry("400x250")
+
+    label = tk.Label(root, text="با فشردن F9 شروع/پایان ضبط را کنترل کن.\nبرای خروج ESC را بزن.", font=("Tahoma", 11))
+    label.pack(pady=10)
+
+    file_count_label = tk.Label(root, text="", font=("Tahoma", 11))
+    file_count_label.pack(pady=10)
+    update_file_count_label()
+
+    delete_btn = tk.Button(root, text="🗑️ حذف همه فایل‌ها", command=delete_all_recordings, bg="red", fg="white")
+    delete_btn.pack(pady=5)
+
+    # انتخاب مدل
+    choose_model_ui(root)
+
+    # کلیدها
+    keyboard.add_hotkey('f9', toggle_recording)
+
+    def wait_for_esc():
+        keyboard.wait('esc')
+        print("خروج از برنامه...")
+        root.quit()
+
+    threading.Thread(target=wait_for_esc, daemon=True).start()
+
+    root.mainloop()
+
+if __name__ == "__main__":
+    file_count_label = None
+    main()
