@@ -11,6 +11,8 @@ from vosk import Model, KaldiRecognizer
 import wave
 import os
 import speech_recognition as sr
+import pyperclip  # برای کپی کردن متن به کلیپ‌بورد
+import json
 
 # تنظیمات عمومی
 is_recording = False
@@ -20,6 +22,7 @@ buffer_duration = 1
 selected_mode = None
 RECORDINGS_DIR = "recordings"
 mic_boost = 1.0  # ضریب تقویت صدا (۱ برابر = بدون تقویت)
+copy_to_clipboard_enabled = True  # پرچم برای فعال یا غیرفعال کردن کپی به کلیپ‌بورد
 
 # ساخت پوشه ضبط‌ها
 os.makedirs(RECORDINGS_DIR, exist_ok=True)
@@ -84,6 +87,7 @@ def save_recording():
 
 def process_audio(filename):
     print(f"پردازش فایل: {filename}")
+    final_text = ""
     
     if selected_mode == "offline":
         wf = wave.open(filename, "rb")
@@ -95,20 +99,36 @@ def process_audio(filename):
             if len(data) == 0:
                 break
             rec.AcceptWaveform(data)
-        print(rec.FinalResult())
+        result = rec.FinalResult()
+        print(f"نتیجه مدل آفلاین: {result}")
 
+        # استخراج متن از خروجی JSON
+        try:
+            final_text = json.loads(result)["text"]
+        except json.JSONDecodeError:
+            print("خطا در پردازش خروجی JSON مدل آفلاین.")
+        
     elif selected_mode == "online":
         r = sr.Recognizer()
         with sr.AudioFile(filename) as source:
             audio = r.record(source)
         try:
             print("مدل آنلاین فعال است...")
-            text = r.recognize_google(audio, language="fa-IR")
-            print("نتیجه:", text)
+            final_text = r.recognize_google(audio, language="fa-IR")
+            print("نتیجه:", final_text)
         except sr.UnknownValueError:
             print("نتوانست گفتار را تشخیص دهد.")
         except sr.RequestError as e:
             print(f"خطا در اتصال به Google: {e}")
+
+    # اگر کپی به کلیپ‌بورد فعال است، متن را کپی می‌کند
+    if copy_to_clipboard_enabled:
+        copy_to_clipboard(final_text)
+
+def copy_to_clipboard(text):
+    """متن ورودی را به کلیپ‌بورد کپی می‌کند"""
+    pyperclip.copy(text)
+    print("متن به کلیپ‌بورد کپی شد.")
 
 # دریافت تعداد فایل‌های ضبط‌شده
 def get_recording_count():
@@ -136,9 +156,18 @@ def update_boost_label(val):
     mic_boost = float(val)
     boost_label.config(text=f"تقویت میکروفون: {mic_boost:.1f}x")
 
+# فعال/غیرفعال کردن کپی به کلیپ‌بورد
+def toggle_copy_to_clipboard():
+    global copy_to_clipboard_enabled
+    copy_to_clipboard_enabled = not copy_to_clipboard_enabled
+    if copy_to_clipboard_enabled:
+        copy_clipboard_btn.config(text="غیرفعال کردن کپی به کلیپ‌بورد")
+    else:
+        copy_clipboard_btn.config(text="فعال کردن کپی به کلیپ‌بورد")
+
 # اجرای برنامه اصلی
 def main():
-    global file_count_label, boost_label
+    global file_count_label, boost_label, copy_clipboard_btn
 
     root = tk.Tk()
     root.title("برنامه تشخیص گفتار")
@@ -165,6 +194,10 @@ def main():
     boost_slider.set(1.0)
     boost_slider.pack()
 
+    # دکمه برای فعال/غیرفعال کردن کپی به کلیپ‌بورد
+    copy_clipboard_btn = tk.Button(root, text="غیرفعال کردن کپی به کلیپ‌بورد", command=toggle_copy_to_clipboard, bg="orange")
+    copy_clipboard_btn.pack(pady=10)
+
     # کلیدها
     keyboard.add_hotkey('f9', toggle_recording)
 
@@ -180,4 +213,5 @@ def main():
 if __name__ == "__main__":
     file_count_label = None
     boost_label = None  # تعریف متغیر boost_label قبل از استفاده
+    copy_clipboard_btn = None  # تعریف متغیر برای دکمه کپی به کلیپ‌بورد
     main()
