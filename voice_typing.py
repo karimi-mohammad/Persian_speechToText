@@ -7,17 +7,25 @@ import threading
 import time
 from vosk import Model, KaldiRecognizer, SetLogLevel
 import wave
-import os  # برای دریافت مسیر مطلق
+import os
+import speech_recognition as sr  # برای مدل آنلاین
 
-# تنظیمات
+# --- تنظیمات ---
 is_recording = False
 recording = []
-samplerate = 44100  # کیفیت ضبط (استاندارد)
-buffer_duration = 1  # مدت زمان بافر (ثانیه)
+samplerate = 44100
+buffer_duration = 1
 
-# بارگذاری مدل فارسی Vosk
+# انتخاب نوع مدل
+use_online = None
+while use_online not in ['1', '2']:
+    use_online = input("مدل مورد نظر را انتخاب کن:\n1. آفلاین (Vosk)\n2. آنلاین (Google Speech)\n>>> ")
 
-model = Model("I:\computer\My projs\other\persian_stt/vosk-model-small-fa-0.42")
+use_online = use_online == '2'
+
+if not use_online:
+    # بارگذاری مدل Vosk (فقط اگر آفلاین انتخاب شده)
+    model = Model("I:\\computer\\My projs\\other\\persian_stt/vosk-model-small-fa-0.42")
 
 def toggle_recording():
     global is_recording, recording
@@ -25,13 +33,11 @@ def toggle_recording():
         print("شروع ضبط صدا...")
         is_recording = True
         recording = []
-
-        # شروع ضبط در یک Thread جدا
         threading.Thread(target=record_audio).start()
     else:
         print("پایان ضبط صدا.")
         is_recording = False
-        time.sleep(0.2)  # چند میلی‌ثانیه به سیستم می‌دهیم که ضبط کامل بشه
+        time.sleep(0.2)
         save_recording()
 
 def record_audio():
@@ -48,30 +54,37 @@ def save_recording():
         filename = f"record_{now}.wav"
         wav.write(filename, samplerate, audio)
         print(f"فایل صدا ذخیره شد: {filename}")
-        time.sleep(2)
-        
-        # مسیر مطلق فایل را دریافت می‌کنیم
         abs_filename = os.path.abspath(filename)
-        process_audio(abs_filename)  # پردازش فایل ذخیره‌شده با مسیر مطلق
+        process_audio(abs_filename)
 
 def process_audio(filename):
-    # باز کردن فایل WAV با مسیر مطلق
     print(f"پردازش فایل: {filename}")
-    wf = wave.open(filename, "rb")
-    rec = KaldiRecognizer(model, wf.getframerate())
+    
+    if use_online:
+        print("تشخیص گفتار با استفاده از مدل آنلاین...")
+        recognizer = sr.Recognizer()
+        with sr.AudioFile(filename) as source:
+            audio_data = recognizer.record(source)
+            try:
+                result = recognizer.recognize_google(audio_data, language="fa-IR")
+                print("متن تشخیص‌داده‌شده:", result)
+            except sr.UnknownValueError:
+                print("تشخیص ممکن نبود.")
+            except sr.RequestError:
+                print("خطا در اتصال به سرویس آنلاین.")
+    else:
+        print("تشخیص گفتار با استفاده از مدل آفلاین (Vosk)...")
+        wf = wave.open(filename, "rb")
+        rec = KaldiRecognizer(model, wf.getframerate())
+        while True:
+            data = wf.readframes(4000)
+            if len(data) == 0:
+                break
+            rec.AcceptWaveform(data)
+        print(rec.FinalResult())
 
-    print("شروع پردازش صدا...")
-    while True:
-        data = wf.readframes(4000)
-        if len(data) == 0:
-            break
-        rec.AcceptWaveform(data)
-
-        
-    print(rec.FinalResult())
-
-# اتصال کلید F9 به تابع
+# هات‌کی برای ضبط
 keyboard.add_hotkey('f9', toggle_recording)
 
-print("برنامه فعال است. با F9 ضبط را شروع/توقف کن. با ESC از برنامه خارج شو.")
+print("برنامه فعال است. با F9 ضبط را شروع/توقف کن. با ESC خارج شو.")
 keyboard.wait('esc')
