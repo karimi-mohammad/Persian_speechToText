@@ -19,6 +19,7 @@ samplerate = 44100
 buffer_duration = 1
 selected_mode = None
 RECORDINGS_DIR = "recordings"
+mic_boost = 1.0  # ضریب تقویت صدا (۱ برابر = بدون تقویت)
 
 # ساخت پوشه ضبط‌ها
 os.makedirs(RECORDINGS_DIR, exist_ok=True)
@@ -66,7 +67,12 @@ def record_audio():
 
 def save_recording():
     if recording:
-        audio = np.concatenate(recording, axis=0)
+        audio = np.concatenate(recording, axis=0).astype(np.float32)
+        audio *= mic_boost  # اعمال تقویت صدا
+
+        # جلوگیری از overflow
+        audio = np.clip(audio, -32768, 32767).astype(np.int16)
+
         now = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"{RECORDINGS_DIR}/record_{now}.wav"
         wav.write(filename, samplerate, audio)
@@ -81,7 +87,7 @@ def process_audio(filename):
     
     if selected_mode == "offline":
         wf = wave.open(filename, "rb")
-        model = Model("I:\computer\My projs\other\persian_stt/vosk-model-small-fa-0.42")
+        model = Model(r"I:\computer\My projs\other\persian_stt\vosk-model-small-fa-0.42")
         rec = KaldiRecognizer(model, wf.getframerate())
         print("مدل آفلاین فعال است...")
         while True:
@@ -123,9 +129,16 @@ def delete_all_recordings():
     update_file_count_label()
     messagebox.showinfo("پاک‌سازی", "همه فایل‌های ضبط‌شده حذف شدند.")
 
+# آپدیت لیبل تقویت صدا
+def update_boost_label(val):
+    global boost_label
+    global mic_boost
+    mic_boost = float(val)
+    boost_label.config(text=f"تقویت میکروفون: {mic_boost:.1f}x")
+
 # اجرای برنامه اصلی
 def main():
-    global file_count_label
+    global file_count_label, boost_label
 
     root = tk.Tk()
     root.title("برنامه تشخیص گفتار")
@@ -144,6 +157,14 @@ def main():
     # انتخاب مدل
     choose_model_ui(root)
 
+    # تنظیمات تقویت صدا
+    boost_label = tk.Label(root, text="تقویت میکروفون: 1.0x", font=("Tahoma", 10))
+    boost_label.pack(pady=(10, 0))
+
+    boost_slider = tk.Scale(root, from_=1.0, to=5.0, resolution=0.1, orient="horizontal", command=update_boost_label)
+    boost_slider.set(1.0)
+    boost_slider.pack()
+
     # کلیدها
     keyboard.add_hotkey('f9', toggle_recording)
 
@@ -158,4 +179,5 @@ def main():
 
 if __name__ == "__main__":
     file_count_label = None
+    boost_label = None  # تعریف متغیر boost_label قبل از استفاده
     main()
