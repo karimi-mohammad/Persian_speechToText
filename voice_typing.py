@@ -1,3 +1,5 @@
+import tkinter as tk
+from tkinter import messagebox
 import keyboard
 import sounddevice as sd
 import numpy as np
@@ -5,28 +7,41 @@ import scipy.io.wavfile as wav
 import datetime
 import threading
 import time
-from vosk import Model, KaldiRecognizer, SetLogLevel
+from vosk import Model, KaldiRecognizer
 import wave
 import os
 import speech_recognition as sr  # برای مدل آنلاین
 
-# --- تنظیمات ---
+# تنظیمات عمومی
 is_recording = False
 recording = []
 samplerate = 44100
 buffer_duration = 1
+selected_mode = None  # online یا offline
 
-# انتخاب نوع مدل
-use_online = None
-while use_online not in ['1', '2']:
-    use_online = input("مدل مورد نظر را انتخاب کن:\n1. آفلاین (Vosk)\n2. آنلاین (Google Speech)\n>>> ")
+# تابع UI برای انتخاب مدل
+def choose_model():
+    def select(option):
+        global selected_mode
+        selected_mode = option
+        root.destroy()
 
-use_online = use_online == '2'
+    root = tk.Tk()
+    root.title("انتخاب مدل تشخیص گفتار")
+    root.geometry("300x150")
 
-if not use_online:
-    # بارگذاری مدل Vosk (فقط اگر آفلاین انتخاب شده)
-    model = Model("I:\\computer\\My projs\\other\\persian_stt/vosk-model-small-fa-0.42")
+    label = tk.Label(root, text="مدل مورد نظر را انتخاب کنید:")
+    label.pack(pady=10)
 
+    btn1 = tk.Button(root, text="مدل آفلاین (Vosk)", command=lambda: select("offline"))
+    btn1.pack(pady=5)
+
+    btn2 = tk.Button(root, text="مدل آنلاین (Google)", command=lambda: select("online"))
+    btn2.pack(pady=5)
+
+    root.mainloop()
+
+# تابع شروع ضبط
 def toggle_recording():
     global is_recording, recording
     if not is_recording:
@@ -54,28 +69,18 @@ def save_recording():
         filename = f"record_{now}.wav"
         wav.write(filename, samplerate, audio)
         print(f"فایل صدا ذخیره شد: {filename}")
+        time.sleep(1)
         abs_filename = os.path.abspath(filename)
         process_audio(abs_filename)
 
 def process_audio(filename):
     print(f"پردازش فایل: {filename}")
     
-    if use_online:
-        print("تشخیص گفتار با استفاده از مدل آنلاین...")
-        recognizer = sr.Recognizer()
-        with sr.AudioFile(filename) as source:
-            audio_data = recognizer.record(source)
-            try:
-                result = recognizer.recognize_google(audio_data, language="fa-IR")
-                print("متن تشخیص‌داده‌شده:", result)
-            except sr.UnknownValueError:
-                print("تشخیص ممکن نبود.")
-            except sr.RequestError:
-                print("خطا در اتصال به سرویس آنلاین.")
-    else:
-        print("تشخیص گفتار با استفاده از مدل آفلاین (Vosk)...")
+    if selected_mode == "offline":
         wf = wave.open(filename, "rb")
+        model = Model("I:\computer\My projs\other\persian_stt/vosk-model-small-fa-0.42")
         rec = KaldiRecognizer(model, wf.getframerate())
+        print("مدل آفلاین فعال است...")
         while True:
             data = wf.readframes(4000)
             if len(data) == 0:
@@ -83,8 +88,24 @@ def process_audio(filename):
             rec.AcceptWaveform(data)
         print(rec.FinalResult())
 
-# هات‌کی برای ضبط
+    elif selected_mode == "online":
+        r = sr.Recognizer()
+        with sr.AudioFile(filename) as source:
+            audio = r.record(source)
+        try:
+            print("مدل آنلاین فعال است...")
+            text = r.recognize_google(audio, language="fa-IR")
+            print("نتیجه:", text)
+        except sr.UnknownValueError:
+            print("نتوانست گفتار را تشخیص دهد.")
+        except sr.RequestError as e:
+            print(f"خطا در اتصال به Google: {e}")
+
+# اجرای UI و انتخاب مدل
+choose_model()
+
+# اتصال کلید F9 به ضبط
 keyboard.add_hotkey('f9', toggle_recording)
 
-print("برنامه فعال است. با F9 ضبط را شروع/توقف کن. با ESC خارج شو.")
+print("برنامه فعال است. با F9 ضبط را شروع/توقف کن. با ESC از برنامه خارج شو.")
 keyboard.wait('esc')
