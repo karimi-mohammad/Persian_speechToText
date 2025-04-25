@@ -91,7 +91,7 @@ def process_audio(filename):
     
     if selected_mode == "offline":
         wf = wave.open(filename, "rb")
-        model = Model(r"I:\computer\My projs\other\persian_stt\vosk-model-small-fa-0.42")
+        model = Model(r".\vosk-model-small-fa-0.42")
         rec = KaldiRecognizer(model, wf.getframerate())
         print("مدل آفلاین فعال است...")
         while True:

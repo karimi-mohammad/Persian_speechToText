@@ -5,7 +5,7 @@ import os
 import wave
 
 wf = wave.open("test.wav", "rb")
-model = Model("I:\computer\My projs\other\persian_stt/vosk-model-small-fa-0.42")
+model = Model("./vosk-model-small-fa-0.42")
 rec = KaldiRecognizer(model, wf.getframerate())
 
 
